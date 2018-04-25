@@ -5,4 +5,4 @@ Clients can connect to any of the servers in the topology and communicate with a
 
 Servers use flood and prune protocol to detect and leave loops when sending messages.
 
-Authors: Clayton Kilmer, Ashton Shears.
+Authors: Clayton Kilmer (server), Ashton Shears (client and some server utility functions).
