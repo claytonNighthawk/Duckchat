@@ -13,7 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <netdb.h> 
-#include <pthread.h>
+// #include <pthread.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <signal.h>
@@ -27,16 +27,18 @@
 #include <iostream>
 #include <sstream>
 #include <random>
+#include "Threadpool.hpp"
+#include "duckchat_data.hpp"
 
 using namespace std;
-map<string, pair<string, sockaddr_in>> userIpPorts; // map of user ip:ports to user names and sockaddr_in structs 
-map<string, set<string>> channelUserIpPorts; // map of channel names to set of users subbed to that channel
+map<string, pair<string, sockaddr_in>> userIpPorts; // map of user ip:ports to a pair of user names and sockaddr_in structs 
+map<string, set<string>> channelUserIpPorts; // map of channel names to set of users (recorded by their ip:port numbers) subbed to that channel 
 
 set<unsigned int> recentlySeenMsgIDs;
-map<string, sockaddr_in> adjServers; // map of server ip:ports to sockaddr_in structs 
+map<string, sockaddr_in> adjServers; // map of server ip:ports to sockaddr_in structs that represents the adjectent servers
 set<string> thisServerChannels; // all channels this server is subbed to because of clients or to pass to other servers.
 
-// map of channel names to a map of server ipPort strings to not in danger bool for the soft join of servers on channels.
+// map of channel names to a map of server ip:port strings to not in danger boolean for the soft join of servers on channels.
 // the keys of the outter map denote the servers that are subbed to that channel.
 // this will not include this server's subscribbed channels as that will be included in thisServerChannels.
 map<string, map<string, bool>> channelSubbedServers;
@@ -171,7 +173,38 @@ void check_for_sent_join() {
     }
 }
 
+void cleanUp() {
+    // printf("cleaning up\n");
+    delete gen_request;  
+    delete login_request; 
+    delete join_request; 
+    delete leave_request; 
+    delete say_request;
+    delete who_request; 
+
+    delete say_text; 
+    delete error_text; 
+
+    if (list_text != NULL) {
+        // delete[] list_text->txt_channels;
+        delete list_text; 
+    }
+
+    if (who_text != NULL) {
+        // delete[] who_text->txt_users;
+        delete who_text; 
+    }
+
+    delete join_s2s;
+    delete leave_s2s;
+    delete say_s2s; 
+}
+
 void sigHandler(int signo) {
+    if (signo == SIGINT) {
+        cleanUp();
+        exit(0);
+    }
     send_s2s_join_to_all_adj_serv_for_all_my_channels();
     check_for_sent_join();
 }
@@ -188,7 +221,7 @@ void handleS2SJoin(string ipPort);
 void handleS2SLeave(string ipPort);
 void handleS2SSay(sockaddr_in src_address);
 
-int main(int argc, char **argv){
+int main(int argc, char **argv) {
     if ((argc - 1) % 2 != 0 || argc == 1){
         perror("Duckchat server requires an even number of server IP port commands as well as this servers IP port.\n");
         return 1;
@@ -207,10 +240,11 @@ int main(int argc, char **argv){
         return -1;
     }
 
-    socklen_t fromlen;
+    socklen_t fromlen = 0;
     sockaddr_in src_address;
 
     signal(SIGALRM, &sigHandler);
+    signal(SIGINT, &sigHandler);
     struct itimerval it_val;
     it_val.it_value.tv_sec = 60;
     it_val.it_value.tv_usec = 0;
@@ -244,54 +278,58 @@ int main(int argc, char **argv){
         stringstream errorStream;
         string ipPort = makeIP_Port_Str(src_address);
 
-        if (userIpPorts.count(ipPort) == 0 && gen_request->req_type != REQ_LOGIN && adjServers.count(ipPort) == 0) {
-            cout << "ERROR! User @ " << ipPort << " has not logged in yet!" << endl;
+        if (userIpPorts.count(ipPort) == 0 && adjServers.count(ipPort) == 0 && gen_request->req_type != REQ_LOGIN) { // if ipPort is not a know user or server and the request type is not login send 
+            cout << "ERROR! User @ " << ipPort << " has not logged in yet!" << endl;                                 // error message to client and print error to console
             errorStream << "User @ " << ipPort << " has not logged in yet!";
             strcpy(error_text->txt_error, errorStream.str().c_str());
             sendto(serverSocket, error_text, sizeof(text_error), 0, (sockaddr*)&src_address, sizeof(sockaddr_in));
         }
-        else if (gen_request->req_type == REQ_LOGIN) {
-            handleLogin(ipPort, src_address);
-        } 
-        else if (gen_request->req_type == REQ_LOGOUT) {
-            handleLogout(ipPort);
-        } 
-        else if (gen_request->req_type == REQ_JOIN) {
-            handleJoin(ipPort);
-        }
-        else if (gen_request->req_type == REQ_LEAVE) {
-            handleLeave(ipPort);
-        }  
-        else if (gen_request->req_type == REQ_SAY) { 
-            handleSay(ipPort, src_address);
-        }
-        else if (gen_request->req_type == REQ_LIST) { 
-            handleList(src_address);
-        }
-        else if (gen_request->req_type == REQ_WHO) { 
-            handleWho(src_address);
-        }
-        else if (gen_request->req_type == S2S_JOIN) {
-            handleS2SJoin(ipPort);
-        } 
-        else if (gen_request->req_type == S2S_LEAVE) {
-            handleS2SLeave(ipPort);
-        }
-        else if (gen_request->req_type == S2S_SAY) {
-            handleS2SSay(src_address);
-        }
-        else {
-            cout << "ERROR! Unknown request type." << endl;
-            errorStream << "Unknown request type.";
-            strcpy(error_text->txt_error, errorStream.str().c_str());
-            sendto(serverSocket, error_text, sizeof(error_text), 0, (sockaddr*)&src_address, sizeof(sockaddr_in));
+ 
+        switch (gen_request->req_type) {
+            case REQ_LOGIN:
+                handleLogin(src_address);
+                break;
+            case REQ_LOGOUT:
+                handleLogout(ipPort);
+                break;
+            case REQ_JOIN:
+                handleJoin(ipPort);
+                break;
+            case REQ_LEAVE:
+                handleLeave(ipPort);
+                break;
+            case REQ_SAY:
+                handleSay(src_address);
+                break;
+            case REQ_LIST:
+                handleList(src_address);
+                break;
+            case REQ_WHO:
+                handleWho(src_address);
+                break;
+            case S2S_JOIN:
+                handleS2SJoin(ipPort);
+                break;
+            case S2S_LEAVE:
+                handleS2SLeave(ipPort);
+                break;
+            case S2S_SAY:
+                handleS2SSay(src_address);
+                break;
+            default:
+                cout << "ERROR! Unknown request type." << endl;
+                errorStream << "Unknown request type.";
+                strcpy(error_text->txt_error, errorStream.str().c_str());
+                sendto(serverSocket, error_text, sizeof(error_text), 0, (sockaddr*)&src_address, sizeof(sockaddr_in));
         }
     }
 }
 
-void handleLogin(string ipPort, sockaddr_in src_address) {
+void handleLogin(sockaddr_in src_address) {
     login_request = (request_login*)gen_request;
-    cout << makeIP_Port_Str(myAddress) << " <- " << ipPort << " Req login " << login_request->req_username << endl;
+    string ipPort = makeIP_Port_Str(src_address);
+    cout << makeIP_Port_Str(myAddress) << " <- " << ipPort << " REQ login " << login_request->req_username << endl;
+
     userIpPorts[ipPort].first = string(login_request->req_username);
     memcpy((void*)&(userIpPorts[ipPort].second), (void*)&src_address, sizeof(sockaddr_in));
 }
@@ -309,7 +347,7 @@ void handleLogout(string ipPort) {
 
 void handleJoin(string ipPort) {
     join_request = (request_join*)gen_request;
-    cout << makeIP_Port_Str(myAddress) << " <- " << ipPort << " Req Join " << join_request->req_channel << " " << userIpPorts[ipPort].first << endl;
+    cout << makeIP_Port_Str(myAddress) << " <- " << ipPort << " REQ Join " << join_request->req_channel << " " << userIpPorts[ipPort].first << endl;
 
     if (thisServerChannels.count(join_s2s->req_channel) == 0) {
         strcpy(join_s2s->req_channel, join_request->req_channel);
@@ -335,8 +373,10 @@ void handleLeave(string ipPort) {
     }
 }
 
-void handleSay(string ipPort, sockaddr_in src_address) {
+void handleSay(sockaddr_in src_address) {
     say_request = (request_say*)gen_request;
+
+    string ipPort = makeIP_Port_Str(src_address);
     string errorString = "";
     stringstream errorStream;
     
