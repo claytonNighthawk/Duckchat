@@ -69,18 +69,18 @@ using namespace std;
         }
     }
 
-void silly (int n) {
-    // A silly job for demonstration purposes
-    cerr << "Sleeping for " << n << " seconds" << endl;
-    this_thread::sleep_for(chrono::seconds(n));
-}
+// void silly (int n) {
+//     // A silly job for demonstration purposes
+//     cerr << "Sleeping for " << n << " seconds" << endl;
+//     this_thread::sleep_for(chrono::seconds(n));
+// }
 
-int main() {
-    ThreadPool pool(4);
+// int main() {
+//     ThreadPool pool(4);
 
-    for (int i = 0; i < 100; i++) {
-        pool.doJob(bind(silly, rand() % 5));
-        // pool.doJob(bind(silly, 2));
-        // sleep(5);
-    }
-}
+//     for (int i = 0; i < 100; i++) {
+//         pool.doJob(bind(silly, rand() % 5));
+//         // pool.doJob(bind(silly, 2));
+//         // sleep(5);
+//     }
+// }

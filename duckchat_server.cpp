@@ -13,7 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <netdb.h> 
-// #include <pthread.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <signal.h>
@@ -27,8 +27,6 @@
 #include <iostream>
 #include <sstream>
 #include <random>
-#include "Threadpool.hpp"
-#include "duckchat_data.hpp"
 
 using namespace std;
 map<string, pair<string, sockaddr_in>> userIpPorts; // map of user ip:ports to a pair of user names and sockaddr_in structs 
@@ -173,47 +171,47 @@ void check_for_sent_join() {
     }
 }
 
-void cleanUp() {
-    // printf("cleaning up\n");
-    delete gen_request;  
-    delete login_request; 
-    delete join_request; 
-    delete leave_request; 
-    delete say_request;
-    delete who_request; 
+// void cleanUp() {
+//     // printf("cleaning up\n");
+//     delete gen_request;  
+//     delete login_request; 
+//     delete join_request; 
+//     delete leave_request; 
+//     delete say_request;
+//     delete who_request; 
 
-    delete say_text; 
-    delete error_text; 
+//     delete say_text; 
+//     delete error_text; 
 
-    if (list_text != NULL) {
-        // delete[] list_text->txt_channels;
-        delete list_text; 
-    }
+//     if (list_text != NULL) {
+//         // delete[] list_text->txt_channels;
+//         delete list_text; 
+//     }
 
-    if (who_text != NULL) {
-        // delete[] who_text->txt_users;
-        delete who_text; 
-    }
+//     if (who_text != NULL) {
+//         // delete[] who_text->txt_users;
+//         delete who_text; 
+//     }
 
-    delete join_s2s;
-    delete leave_s2s;
-    delete say_s2s; 
-}
+//     delete join_s2s;
+//     delete leave_s2s;
+//     delete say_s2s; 
+// }
 
 void sigHandler(int signo) {
     if (signo == SIGINT) {
-        cleanUp();
+        // cleanUp();
         exit(0);
     }
     send_s2s_join_to_all_adj_serv_for_all_my_channels();
     check_for_sent_join();
 }
 
-void handleLogin(string ipPort, sockaddr_in src_address);
+void handleLogin(sockaddr_in src_address);
 void handleLogout(string ipPort);
 void handleJoin(string ipPort);
 void handleLeave(string ipPort);
-void handleSay(string ipPort, sockaddr_in src_address);
+void handleSay(sockaddr_in src_address);
 void handleList(sockaddr_in src_address);
 void handleWho(sockaddr_in src_address);
 

@@ -12,5 +12,5 @@ test: Threadpool.cpp
 	g++ $< $(CFLAGS) -std=c++11 -o threadtest -pthread
 
 clean:
-	rm -f client server *.o
+	rm -f client server threadtest *.o
 
